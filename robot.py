@@ -166,7 +166,7 @@ class GuidedInterface:
     def find_files(self,pattern):
         matches = []
         for root, dirnames, filenames in os.walk('./records'):  # 当前目录及其子目录遍历
-            for filename in fnmatch.filter(filenames, '*' + pattern + '*'):  # 使用通配符匹配文件名
+            for filename in fnmatch.filter(filenames,  pattern + '_*'):  # 使用通配符匹配文件名
                 matches.append(os.path.join(root, filename))  # 将匹配到的文件路径添加到列表中
         return matches
 
