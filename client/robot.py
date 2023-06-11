@@ -1,4 +1,5 @@
 import os
+import re
 import tkinter as tk
 import time
 from tkinter import filedialog
@@ -8,9 +9,7 @@ from tkinter import ttk
 
 
 class ReplayRobot:
-    def __init__(self, width, height,log_file):
-        self.width = width
-        self.height = height
+    def __init__(self,log_file):
 
         self.actions = {}
         self.food_positions = {}
@@ -24,16 +23,12 @@ class ReplayRobot:
 
         self.eat_flag = False#标志着该帧蛇是否吃到食物
 
-        self.canvas = tk.Canvas(self.window, width=self.width, height=self.height)
-        self.canvas.pack()
-
-        self.snake = [(self.width / 2, self.height / 2)]
-        self.direction = "Right"
-
         #read log file
         with open(log_file, "r") as file:
             for line in file:
-                if line.startswith("[Frame"):
+                if line.startswith('game_size'):
+                    self.width,self.height = self.extract_size(line.__str__())
+                elif line.startswith("[Frame"):
                     file_frame = int(line.split(":")[1].split("]")[0])
                     if "Direction change" in line:
                         direction = line[line.find('(')+1:line.find(')')]
@@ -43,6 +38,13 @@ class ReplayRobot:
                         x = int(position[0].strip())
                         y = int(position[1].strip())
                         self.food_positions[file_frame] = (x,y)
+
+
+        self.canvas = tk.Canvas(self.window, width=self.width, height=self.height)
+        self.canvas.pack()
+
+        self.snake = [(self.width / 2, self.height / 2)]
+        self.direction = "Right"
 
         (food_first_x,food_first_y) = self.food_positions[0]
         self.food = self.canvas.create_oval(food_first_x, food_first_y, food_first_x+10, food_first_y+10, fill="red")
@@ -135,6 +137,16 @@ class ReplayRobot:
         self.start_time = time.time()
         self.timer = self.window.after(self.timer_interval, self.on_timer)
         self.window.mainloop()
+    
+    def extract_size(self,string):
+        pattern = r'w(\d+)h(\d+)'  # 正则表达式模式
+        match = re.search(pattern, string)  # 在字符串中搜索匹配项
+        if match:
+            width = match.group(1)  # 获取第一个括号中的匹配项
+            height = match.group(2)  # 获取第二个括号中的匹配项
+            return int(width), int(height)
+        else:
+            return None
 
 
 class GuidedInterface:
@@ -180,13 +192,12 @@ class GuidedInterface:
     def on_file_selected(self,file):
         self.selected_file_path = self.dropdown.get()
         if self.selected_file_path and os.path.isfile(self.selected_file_path):
-            replay = ReplayRobot(400,400,self.selected_file_path)
+            replay = ReplayRobot(self.selected_file_path)
             replay.start()
         else:
             remind_label = tk.Label(self.window, text="No record found, please try again", font=("Helvetica", 16))
             self.dropdown.destroy()
     
-
     def start(self):
         self.window.mainloop()
 

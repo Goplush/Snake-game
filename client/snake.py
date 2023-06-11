@@ -10,8 +10,11 @@ class SnakeGame:
 
         self.window = tk.Tk()
         self.window.title("贪吃蛇游戏")
+        self.window.protocol("WM_DELETE_WINDOW", self.onClose)
+
 
         self.log_file = open("records/game_log.log", "w")
+        self.log_file.write(f"game_size:w{width}h{height}\n")
         self.timer_interval = 200
         self.timer = None
         self.frame = 0 #本局游戏目前的所处的帧的计数
@@ -172,6 +175,11 @@ class SnakeGame:
         self.start_time = time.time()
         self.timer = self.window.after(self.timer_interval, self.on_timer)
         self.window.mainloop()
+    
+    #close event hendeler
+    def onClose(self):
+        self.window.quit()
+        self.window.destroy()
 
 game = SnakeGame(400, 400)
 game.start()
