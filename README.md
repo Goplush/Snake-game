@@ -27,3 +27,15 @@ Features:
 
 - Snake: Play the game. After dying, enter a nickname and click confirm to save the recording. The default nickname is "player."
 - Robot: Playback recordings. Search for recordings by nickname and display all recordings on the local machine associated with that nickname. The suffix of each recording is the time it was saved. Click on a recording to automatically start playing it.
+
+
+
+
+
+
+
+client：目前单人的游戏功能已经整合完毕
+
+正在实现多人游戏功能
+
+每个多人游戏包括两个TCP连接：分别负责主机到客户机的数据发送和客户机到主机的数据发送
