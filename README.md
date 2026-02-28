@@ -1,41 +1,89 @@
-# Snake-game
+# Snake Game
 
-带回放功能的贪吃蛇游戏
+带录像与回放功能的 Tkinter 贪吃蛇项目，包含单人模式、本地双人模式，以及对应的回放工具。
 
-目前的python文件均可直接运行（python版本 3.10）
+## 环境
 
-打包命令：
+- Python 3.10 或更高版本
+- 标准库 `tkinter`
 
-- snake.py:  `pyinstaller -Dw -i snake.png --distpath out/snake snake.py`
-- robot.py: `pyinstaller -Fw -i replay.png -n replay.exe --distpath out/snake robot.py`
+## 运行方式
 
-功能：
+- 单人游戏：`python client/snake.py`
+- 单人回放：`python client/robot.py`
+- 本地双人游戏：`python client/multiplayer.py`
+- 本地双人回放：`python client/multiplayer_robot.py`
+- 菜单启动器：`python client/gameloader.py`
 
-- snake：进行游戏，死亡后输入昵称，点击确认保存录像，默认昵称为`player`
-- robot：录像回放，通过昵称查找录像，列出本机该昵称的所有录像，之后的后缀为时间，点击选择后自动播放
+## 当前功能
 
-snake game with replay function
+### 单人模式
 
-All current python files can run directly (Python version 3.10)
+- 使用方向键控制移动。
+- 死亡后可输入昵称保存录像。
+- 录像保存在 `records/` 目录。
 
-The command to packaging it into executable file:
+### 单人回放
 
-- snake.py:  `pyinstaller -Dw -i snake.png --distpath out/snake snake.py`
-- robot.py: `pyinstaller -Fw -i replay.png -n replay.exe --distpath out/snake robot.py`
+- 通过昵称筛选本地录像。
+- 选择录像后自动回放。
 
-Features:
+### 本地双人模式
 
-- Snake: Play the game. After dying, enter a nickname and click confirm to save the recording. The default nickname is "player."
-- Robot: Playback recordings. Search for recordings by nickname and display all recordings on the local machine associated with that nickname. The suffix of each recording is the time it was saved. Click on a recording to automatically start playing it.
+- `P1` 使用 `W/A/S/D` 控制。
+- `P2` 使用方向键控制。
+- 双方共用同一张地图和食物。
+- 游戏不会在第一个玩家死亡时结束，只有双方都死亡才结束。
+- 先死亡的一方会从蛇头开始，按蛇身一隔一生成食物。
+- 游戏结束后可分别为 `P1` 和 `P2` 命名并保存多人录像。
 
+### 本地双人回放
 
+- 独立脚本实现，不影响单人回放。
+- 自动读取 `records/` 下的 `multi_*.log` 文件。
+- 支持按玩家名搜索多人录像。
+- 可回放双人对局中的双方蛇身、分数、时间和最终结果。
 
+## 录像文件
 
+- 单人录像：保存在 `records/` 目录，文件名形如 `player_2026-02-27_12-00.log`
+- 双人录像：保存在 `records/` 目录，文件名形如 `multi_P1_P2_2026-02-27_12-00-00.log`
 
+## 项目文件说明
 
+- `client/snake.py`：单人游戏
+- `client/robot.py`：单人回放
+- `client/multiplayer.py`：本地双人游戏
+- `client/multiplayer_robot.py`：本地双人回放
+- `client/gameloader.py`：菜单入口
 
-client：目前单人的游戏功能已经整合完毕
+## English
 
-正在实现多人游戏功能
+This is a Tkinter snake game project with recording and replay support.
 
-每个多人游戏包括两个TCP连接：分别负责主机到客户机的数据发送和客户机到主机的数据发送
+### Modes
+
+- Single-player game with local recording
+- Single-player replay browser
+- Local multiplayer game for two players on one keyboard
+- Dedicated multiplayer replay browser/player
+
+### Controls
+
+- Single-player: Arrow keys
+- Multiplayer `P1`: `W/A/S/D`
+- Multiplayer `P2`: Arrow keys
+
+### Multiplayer Rules
+
+- The match ends only after both players die.
+- When the first player dies, that snake turns into food starting from the head, using every other segment.
+- After the match ends, you can enter separate names for `P1` and `P2` and save the replay.
+
+### Launch
+
+- `python client/snake.py`
+- `python client/robot.py`
+- `python client/multiplayer.py`
+- `python client/multiplayer_robot.py`
+- `python client/gameloader.py`

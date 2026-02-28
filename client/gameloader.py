@@ -1,81 +1,92 @@
 import tkinter as tk
 from tkinter import messagebox
+
+from multiplayer import LocalMultiplayerSnakeGame
 from snake import SnakeGame
+
+
+DEFAULT_WIDTH = 400
+DEFAULT_HEIGHT = 400
+MIN_SIZE = 200
+
 
 class MainMenu:
     def __init__(self):
         self.window = tk.Tk()
-        self.window.title("游戏主界面")
+        self.window.title("Snake Game")
+        self.window.protocol("WM_DELETE_WINDOW", self.on_close)
 
-        # 单人游戏按钮
-        self.single_player_button = tk.Button(self.window, text="单人游戏", command=self.start_single_player_game)
-        self.single_player_button.pack()
+        self.title_label = tk.Label(self.window, text="Snake Game", font=("Helvetica", 18))
+        self.title_label.pack(pady=(10, 5))
 
-        # 多人游戏按钮
-        self.multiplayer_button = tk.Button(self.window, text="多人游戏", command=self.start_multiplayer_game)
-        self.multiplayer_button.pack()
-
-    def start_single_player_game(self):
-        self.window.withdraw()  # 隐藏主界面
-        single_player_game_interface = SinglePlayerGameInterface()
-        single_player_game_interface.start()
-        self.window.deiconify()  # 恢复主界面显示
-
-    def start_multiplayer_game(self):
-        messagebox.showinfo("提示", "多人游戏功能正在开发中")
-
-    def start(self):
-        self.window.mainloop()
-
-class SinglePlayerGameInterface:
-    def __init__(self):
-        self.window = tk.Tk()
-        self.window.title("单人游戏界面")
-        self.window.protocol("WM_DELETE_WINDOW", self.onClose)
-
-
-        # 长度输入框和标签
-        self.width_label = tk.Label(self.window, text="请输入界面的宽度:")
+        self.width_label = tk.Label(self.window, text="Width:")
         self.width_label.pack()
         self.width_entry = tk.Entry(self.window)
+        self.width_entry.insert(0, str(DEFAULT_WIDTH))
         self.width_entry.pack()
 
-        # 宽度输入框和标签
-        self.height_label = tk.Label(self.window, text="请输入界面的高度:")
+        self.height_label = tk.Label(self.window, text="Height:")
         self.height_label.pack()
         self.height_entry = tk.Entry(self.window)
+        self.height_entry.insert(0, str(DEFAULT_HEIGHT))
         self.height_entry.pack()
 
-        # 开始游戏按钮
-        self.start_game_button = tk.Button(self.window, text="开始游戏", command=self.start_game)
-        self.start_game_button.pack()
+        self.single_player_button = tk.Button(
+            self.window,
+            text="Single Player",
+            command=self.start_single_player_game,
+            width=18,
+        )
+        self.single_player_button.pack(pady=(10, 5))
 
-    def isParaLegal(self):
-        width = self.width_entry.get()
-        height = self.height_entry.get()
-        if not width or not height:
-            return False
+        self.multiplayer_button = tk.Button(
+            self.window,
+            text="Local Multiplayer",
+            command=self.start_multiplayer_game,
+            width=18,
+        )
+        self.multiplayer_button.pack(pady=(0, 10))
+
+    def parse_size(self):
+        width = self.width_entry.get().strip()
+        height = self.height_entry.get().strip()
         try:
-            if int(width)<200 or int(height)<200:
-                return False
-            return True
-        except:
-            return False
-    
-    def start_game(self):
-        if not self.isParaLegal():
-            messagebox.showwarning("警告", "请输入有效的宽度和高度")
+            width_value = int(width)
+            height_value = int(height)
+        except ValueError:
+            return None
+
+        if width_value < MIN_SIZE or height_value < MIN_SIZE:
+            return None
+        return width_value, height_value
+
+    def launch_game(self, game_factory):
+        size = self.parse_size()
+        if size is None:
+            messagebox.showwarning(
+                "Invalid Size",
+                f"Width and height must both be integers >= {MIN_SIZE}.",
+            )
             return
-        self.window.withdraw()  # 隐藏主界面
-        game = SnakeGame(int(self.width_entry.get()),int(self.height_entry.get()))
+
+        self.window.withdraw()
+        game = game_factory(*size)
         game.start()
-        self.window.deiconify() #重新显示主界面
+        self.window.deiconify()
+
+    def start_single_player_game(self):
+        self.launch_game(SnakeGame)
+
+    def start_multiplayer_game(self):
+        self.launch_game(LocalMultiplayerSnakeGame)
 
     def start(self):
         self.window.mainloop()
-    def onClose(self):
+
+    def on_close(self):
         self.window.quit()
         self.window.destroy()
-# 创建游戏主界面对象并启动游戏
-main = MainMenu()
-main.start()
+
+
+if __name__ == "__main__":
+    MainMenu().start()

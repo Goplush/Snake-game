@@ -1,367 +1,543 @@
+import json
 import os
 import random
 import re
-import socket
-import tkinter as tk
 import time
-from tkinter import filedialog
-import fnmatch
-from tkinter import ttk
+import tkinter as tk
 
 
-
-class MultiRemote:
-    def __init__(self,socket):
-
-        self.actions = {}
-        self.food_positions = {}
-
-        self.window = tk.Tk()
-        self.window.title("贪吃蛇游戏")
-
-        self.timer_interval = 200
-        self.timer = None
-        self.frame = 0 #本局游戏目前的所处的帧的计数
-        self.log_file = open("records/remote_log.log", "w")
-
-        self.eat_flag = False#标志着该帧蛇是否吃到食物
-        start_flag = False#标志着对方是否开始游戏
-
-        #消息列表初始化
-        self.food_positions = dict()
-        self.actions = dict()
-
-        #连接远程主机
-        self.sock = socket
-        
-        #从远程主机中读取游戏初始化数据，包括最开始的食物位置
-        self.recv_game_data()
-        
-
-        self.canvas = tk.Canvas(self.window, width=self.width, height=self.height)
-        self.canvas.pack()
-
-        self.snake = [(self.width / 2, self.height / 2)]
-        self.direction = "Right"
-
-        (food_first_x,food_first_y) = self.food_positions[0]
-        self.food = self.canvas.create_oval(food_first_x, food_first_y, food_first_x+10, food_first_y+10, fill="red")
-
-        self.game_over_flag = False
-        self.start_time = None
-        self.score = 0
-        self.score_label = None
-
-        self.timer_label = tk.Label(self.window, text="Time: 0 s", font=("Helvetica", 16))
-        self.score_label = tk.Label(self.window, text="Score: 0", font=("Helvetica", 16))
-        self.timer_label.pack()
-        self.score_label.pack()
+GRID_SIZE = 10
+DEFAULT_WIDTH = 400
+DEFAULT_HEIGHT = 400
+TEMP_RECORD_PATH = os.path.join("records", "multiplayer_game_log.log")
 
 
-    def move_snake(self):
-        if self.game_over_flag:
-            return
-        
-        x, y = self.snake[0]
-        if self.direction == "Left":
-            x -= 10
-        elif self.direction == "Right":
-            x += 10
-        elif self.direction == "Up":
-            y -= 10
-        elif self.direction == "Down":
-            y += 10
-
-        self.snake.insert(0, (x, y))
-        if self.eat_flag:
-            self.score += 1
-            self.score_label.config(text=f"Score: {self.score}")
-            self.eat_flag = False
-        else:
-            self.snake.pop()
-
-        x1, y1, x2, y2 = self.canvas.coords(self.food)
-        self.canvas.delete("all")
-        for segment in self.snake:
-            self.canvas.create_rectangle(segment[0], segment[1], segment[0] + 10, segment[1] + 10, fill="green")
-        self.food = self.canvas.create_oval(x1, y1, x2, y2, fill="red")
-
-        if self.check_collision():
-            self.game_over()
-
-    def check_collision(self):
-        x, y = self.snake[0]
-        if x < 0 or x >= self.width or y < 0 or y >= self.height:
-            return True
-        for segment in self.snake[1:]:
-            if x == segment[0] and y == segment[1]:
-                return True
-        return False
-
-    def on_timer(self):
-        self.recv_game_data()
-        self.frame = self.frame+1
-        try:
-            direct = self.actions[self.frame]
-            self.direction = direct
-        except Exception as e:
-            print(f"no direction change in frame {self.frame}")
-        try:
-            (x,y) = self.food_positions[self.frame]
-            self.eat_flag = True
-            self.food = self.canvas.create_oval(x, y, x+10, y+10, fill="red")
-        except:
-            print(f"no food eating in frame {self.frame}")
-        
-        if not self.start_time:
-            self.start_time = time.time()
-        elapsed_time = int(time.time() - self.start_time)
-        self.timer_label.config(text=f"Time: {elapsed_time} s")
-
-        self.move_snake()
-
-        if not self.game_over_flag:
-            self.timer = self.window.after(self.timer_interval, self.on_timer)
-        else:
-            print(0)
-
-    def game_over(self):
-        self.log_file.close()
-        self.game_over_flag = True
-        elapsed_time = int(time.time() - self.start_time)
-        self.timer_label.config(text=f"Time: {elapsed_time} s")
-        self.canvas.create_text(self.width / 2, self.height / 2, text="Game Over", font=("Helvetica", 24), fill="red")
-
-
-    def start(self):
-        self.start_time = time.time()
-        self.timer = self.window.after(self.timer_interval, self.on_timer)
-        self.window.mainloop()
-    
-    def extract_size(self,string):
-        pattern = r'w(\d+)h(\d+)'  # 正则表达式模式
-        match = re.search(pattern, string)  # 在字符串中搜索匹配项
-        if match:
-            width = match.group(1)  # 获取第一个括号中的匹配项
-            height = match.group(2)  # 获取第二个括号中的匹配项
-            return int(width), int(height)
-        else:
-            return None
-    def recv_game_data(self):
-        #从远程主机中读取游戏数据的方法，包括最开始的食物位置
-        data = self.sock.recv(1024)
-        decoded_data = data.decode()
-        lines = decoded_data.splitlines()
-        for line in lines:
-            self.log_file.write(line)
-            if line.startswith('game_size'):
-                self.width,self.height = self.extract_size(line.__str__())
-            elif line.startswith("[Frame"):
-                file_frame = int(line.split(":")[1].split("]")[0])
-                if "Direction change" in line:
-                    direction = line[line.find('(')+1:line.find(')')]
-                    self.actions[file_frame] = direction
-                elif "Food created" in line:
-                    position = line.split("(")[1].split(")")[0].split(",")
-                    x = int(position[0].strip())
-                    y = int(position[1].strip())
-                    self.food_positions[file_frame] = (x,y)
-
-
-
-
-
-class MultiLocalHost:
-    def __init__(self, width, height,socket):
+class LocalMultiplayerSnakeGame:
+    def __init__(self, width, height):
         self.width = width
         self.height = height
-        self.socket = socket
-        self.window = tk.Tk()
-        self.window.title("贪吃蛇游戏")
-        self.window.protocol("WM_DELETE_WINDOW", self.onClose)
-        self.client_socket, self.client_address = server_socket.accept()
-        
 
-        self.log_file = open("records/game_log.log", "w")
-        self.log_file.write(f"game_size:w{width}h{height}\n")
+        self.window = tk.Tk()
+        self.window.title("Snake Game - Local Multiplayer")
+        self.window.protocol("WM_DELETE_WINDOW", self.on_close)
+
         self.timer_interval = 200
         self.timer = None
-        self.frame = 0 #本局游戏目前的所处的帧的计数
+        self.start_time = None
+        self.game_over_flag = False
+        self.frame = 0
 
-        self.canvas = tk.Canvas(self.window, width=self.width, height=self.height)
+        self.canvas = tk.Canvas(self.window, width=self.width, height=self.height, bg="black")
         self.canvas.pack()
 
-        self.snake = [(self.width / 2, self.height / 2)]
-        self.direction = "Right"
-
-        self.food = self.create_food()
-        self.canvas.bind_all("<Key>", self.on_key_press)
-
-        self.game_over_flag = False
-        self.start_time = None
-        self.score = 0
-        self.score_label = None
-
-        self.timer_label = tk.Label(self.window, text="Time: 0 s", font=("Helvetica", 16))
-        self.score_label = tk.Label(self.window, text="Score: 0", font=("Helvetica", 16))
+        self.info_label = tk.Label(
+            self.window,
+            text="P1: W A S D    P2: Arrow Keys",
+            font=("Helvetica", 12),
+        )
+        self.info_label.pack()
+        self.timer_label = tk.Label(self.window, text="Time: 0 s", font=("Helvetica", 14))
         self.timer_label.pack()
-        self.score_label.pack()
 
+        self.score_frame = tk.Frame(self.window)
+        self.score_frame.pack()
+        self.player_one_label = tk.Label(
+            self.score_frame, text="P1 Score: 0", font=("Helvetica", 14), fg="green"
+        )
+        self.player_one_label.pack(side=tk.LEFT, padx=10)
+        self.player_two_label = tk.Label(
+            self.score_frame, text="P2 Score: 0", font=("Helvetica", 14), fg="cyan"
+        )
+        self.player_two_label.pack(side=tk.LEFT, padx=10)
 
+        self.status_label = tk.Label(self.window, text="", font=("Helvetica", 14))
+        self.status_label.pack()
 
-    def create_food(self):
-        x = random.randint(30, self.width - 30)
-        y = random.randint(30, self.height - 30)
-        self.log_file.write(f"[Frame: {self. frame}] Food created at position ({x}, {y})\n")
-        return self.canvas.create_oval(x, y, x + 10, y + 10, fill="red")
+        self.save_hint_label = None
+        self.p1_name_label = None
+        self.p2_name_label = None
+        self.p1_name_entry = None
+        self.p2_name_entry = None
+        self.save_button = None
+
+        self.log_file = None
+        self.record_saved = False
+
+        self.window.bind_all("<Key>", self.on_key_press)
+
+        self.reset_state()
+
+    def reset_state(self):
+        self.cleanup_log()
+        os.makedirs("records", exist_ok=True)
+        self.log_file = open(TEMP_RECORD_PATH, "w", encoding="utf-8")
+        self.log_file.write(
+            "MULTI_META "
+            + json.dumps(
+                {
+                    "width": self.width,
+                    "height": self.height,
+                    "grid_size": GRID_SIZE,
+                    "timer_interval": self.timer_interval,
+                }
+            )
+            + "\n"
+        )
+
+        center_y = (self.height // 2 // GRID_SIZE) * GRID_SIZE
+        left_start = max(GRID_SIZE * 3, (self.width // 4 // GRID_SIZE) * GRID_SIZE)
+        right_start = min(
+            self.width - GRID_SIZE * 4,
+            (self.width * 3 // 4 // GRID_SIZE) * GRID_SIZE,
+        )
+
+        self.snakes = {
+            "player1": [(left_start, center_y)],
+            "player2": [(right_start, center_y)],
+        }
+        self.directions = {
+            "player1": "Right",
+            "player2": "Left",
+        }
+        self.alive = {
+            "player1": True,
+            "player2": True,
+        }
+        self.scores = {
+            "player1": 0,
+            "player2": 0,
+        }
+        self.food_positions = []
+        first_food = self.create_food_position(self.all_occupied_positions(), [])
+        if first_food is not None:
+            self.food_positions.append(first_food)
+
+        self.frame = 0
+        self.start_time = None
+        self.game_over_flag = False
+        self.record_saved = False
+        self.player_one_label.config(text="P1 Score: 0")
+        self.player_two_label.config(text="P2 Score: 0")
+        self.timer_label.config(text="Time: 0 s")
+        self.status_label.config(text="")
+        self.clear_save_widgets()
+        self.render()
+        self.log_state()
+
+    def cleanup_log(self):
+        if self.log_file and not self.log_file.closed:
+            self.log_file.close()
+
+    def clear_save_widgets(self):
+        widgets = [
+            self.save_hint_label,
+            self.p1_name_label,
+            self.p2_name_label,
+            self.p1_name_entry,
+            self.p2_name_entry,
+            self.save_button,
+        ]
+        for widget in widgets:
+            if widget is not None:
+                widget.destroy()
+
+        self.save_hint_label = None
+        self.p1_name_label = None
+        self.p2_name_label = None
+        self.p1_name_entry = None
+        self.p2_name_entry = None
+        self.save_button = None
+
+    def all_occupied_positions(self):
+        occupied = set()
+        for player in ("player1", "player2"):
+            occupied.update(self.snakes[player])
+        return occupied
+
+    def create_food_position(self, occupied_positions, extra_blocked):
+        blocked = set(occupied_positions) | set(extra_blocked)
+        candidates = []
+        for x in range(0, self.width, GRID_SIZE):
+            for y in range(0, self.height, GRID_SIZE):
+                if (x, y) not in blocked:
+                    candidates.append((x, y))
+        if not candidates:
+            return None
+        return random.choice(candidates)
 
     def on_key_press(self, event):
-        key = event.keysym
-        if key ==self.direction:
+        if self.game_over_flag and event.keysym == "space":
+            self.restart_game()
             return
-        if key == "Left" and self.direction != "Right":
-            self.direction = "Left"
-            #log the directon change
-            self.log_file.write(f"[Frame: {self. frame}] Direction change: ({key})\n")
-        elif key == "Right" and self.direction != "Left":
-            self.direction = "Right"
-            #log the directon change
-            self.log_file.write(f"[Frame: {self. frame}] Direction change: ({key})\n")
-        elif key == "Up" and self.direction != "Down":
-            self.direction = "Up"
-            #log the directon change
-            self.log_file.write(f"[Frame: {self. frame}] Direction change: ({key})\n")
-        elif key == "Down" and self.direction != "Up":
-            self.direction = "Down"
-            #log the directon change
-            self.log_file.write(f"[Frame: {self. frame}] Direction change: ({key})\n")
 
+        key_map = {
+            "a": ("player1", "Left"),
+            "d": ("player1", "Right"),
+            "w": ("player1", "Up"),
+            "s": ("player1", "Down"),
+            "Left": ("player2", "Left"),
+            "Right": ("player2", "Right"),
+            "Up": ("player2", "Up"),
+            "Down": ("player2", "Down"),
+        }
+        if event.keysym not in key_map:
+            return
 
-    def move_snake(self):
+        player, next_direction = key_map[event.keysym]
+        if not self.alive[player]:
+            return
+
+        current_direction = self.directions[player]
+        opposites = {
+            "Left": "Right",
+            "Right": "Left",
+            "Up": "Down",
+            "Down": "Up",
+        }
+        if next_direction == current_direction or opposites[next_direction] == current_direction:
+            return
+
+        self.directions[player] = next_direction
+
+    def next_head(self, player):
+        x, y = self.snakes[player][0]
+        direction = self.directions[player]
+        if direction == "Left":
+            return x - GRID_SIZE, y
+        if direction == "Right":
+            return x + GRID_SIZE, y
+        if direction == "Up":
+            return x, y - GRID_SIZE
+        return x, y + GRID_SIZE
+
+    def build_candidate_snake(self, player, next_head, ate_food):
+        candidate = [next_head] + list(self.snakes[player])
+        if not ate_food and candidate:
+            candidate.pop()
+        return candidate
+
+    def is_out_of_bounds(self, position):
+        x, y = position
+        return x < 0 or x >= self.width or y < 0 or y >= self.height
+
+    def resolve_deaths(self, active_players, next_heads, candidate_snakes, ate_food):
+        deaths = set()
+
+        for player in active_players:
+            head = next_heads[player]
+            if self.is_out_of_bounds(head):
+                deaths.add(player)
+                continue
+            if head in candidate_snakes[player][1:]:
+                deaths.add(player)
+
+        if len(active_players) == 2:
+            player_one, player_two = active_players
+            player_one_head = next_heads[player_one]
+            player_two_head = next_heads[player_two]
+
+            if player_one_head == player_two_head:
+                deaths.update(active_players)
+                return deaths
+
+            if (
+                player_one_head == self.snakes[player_two][0]
+                and player_two_head == self.snakes[player_one][0]
+            ):
+                deaths.update(active_players)
+                return deaths
+
+            for player, opponent in (
+                (player_one, player_two),
+                (player_two, player_one),
+            ):
+                opponent_body = list(self.snakes[opponent])
+                if not ate_food[opponent] and opponent_body:
+                    opponent_body = opponent_body[:-1]
+                if next_heads[player] in opponent_body:
+                    deaths.add(player)
+
+        return deaths
+
+    def corpse_to_food(self, corpse_segments, occupied_positions, existing_foods):
+        corpse_foods = []
+        blocked = set(occupied_positions) | set(existing_foods)
+        alternating_segments = list(corpse_segments[::2])
+        for segment in alternating_segments:
+            if self.is_out_of_bounds(segment):
+                continue
+            if segment in blocked:
+                continue
+            corpse_foods.append(segment)
+            blocked.add(segment)
+        return corpse_foods
+
+    def tick(self):
         if self.game_over_flag:
             return
-        
-        x, y = self.snake[0]
-        if self.direction == "Left":
-            x -= 10
-        elif self.direction == "Right":
-            x += 10
-        elif self.direction == "Up":
-            y -= 10
-        elif self.direction == "Down":
-            y += 10
 
-        self.snake.insert(0, (x, y))
-        if self.canvas.coords(self.food)[0]+5>=x >= self.canvas.coords(self.food)[0]-5 and self.canvas.coords(self.food)[1]+5>=y >= self.canvas.coords(self.food)[1]-5:
-            self.canvas.delete(self.food)
-            self.food = self.create_food()
-            self.score += 1
-            self.score_label.config(text=f"Score: {self.score}")
-        else:
-            self.snake.pop()
+        active_players = [player for player in ("player1", "player2") if self.alive[player]]
+        if not active_players:
+            self.finish_game()
+            return
 
-        x1, y1, x2, y2 = self.canvas.coords(self.food)
+        next_heads = {}
+        ate_food = {}
+        candidate_snakes = {}
+
+        for player in active_players:
+            next_head = self.next_head(player)
+            next_heads[player] = next_head
+            ate_food[player] = next_head in self.food_positions
+            candidate_snakes[player] = self.build_candidate_snake(
+                player,
+                next_head,
+                ate_food[player],
+            )
+
+        deaths = self.resolve_deaths(active_players, next_heads, candidate_snakes, ate_food)
+        survivors = [player for player in active_players if player not in deaths]
+
+        consumed_foods = set()
+        for player in survivors:
+            self.snakes[player] = candidate_snakes[player]
+            if ate_food[player]:
+                self.scores[player] += 1
+                consumed_foods.add(next_heads[player])
+
+        survivor_positions = set()
+        for player in survivors:
+            survivor_positions.update(self.snakes[player])
+
+        remaining_foods = [food for food in self.food_positions if food not in consumed_foods]
+        for player in deaths:
+            corpse_foods = self.corpse_to_food(
+                self.snakes[player],
+                survivor_positions,
+                remaining_foods,
+            )
+            remaining_foods.extend(corpse_foods)
+            self.alive[player] = False
+            self.snakes[player] = []
+
+        if survivors and not remaining_foods:
+            extra_food = self.create_food_position(survivor_positions, [])
+            if extra_food is not None:
+                remaining_foods.append(extra_food)
+
+        self.food_positions = remaining_foods
+        self.player_one_label.config(text=f"P1 Score: {self.scores['player1']}")
+        self.player_two_label.config(text=f"P2 Score: {self.scores['player2']}")
+
+        self.render()
+        self.log_state()
+
+        if not any(self.alive.values()):
+            self.finish_game()
+        elif deaths:
+            defeated = []
+            if "player1" in deaths:
+                defeated.append("P1")
+            if "player2" in deaths:
+                defeated.append("P2")
+            self.status_label.config(text=f"{' & '.join(defeated)} died. Survive until both are down.")
+
+    def winner_text(self):
+        if self.scores["player1"] > self.scores["player2"]:
+            return "Player 1 Wins"
+        if self.scores["player2"] > self.scores["player1"]:
+            return "Player 2 Wins"
+        return "Draw"
+
+    def finish_game(self):
+        if self.game_over_flag:
+            return
+
+        self.game_over_flag = True
+        elapsed_time = int(time.time() - self.start_time) if self.start_time else 0
+        result_text = self.winner_text()
+
+        self.timer_label.config(text=f"Time: {elapsed_time} s")
+        self.status_label.config(text=f"{result_text} - press Space to restart")
+        self.canvas.create_text(
+            self.width / 2,
+            self.height / 2,
+            text=result_text,
+            font=("Helvetica", 24),
+            fill="white",
+        )
+
+        if self.log_file and not self.log_file.closed:
+            self.log_file.write(
+                "MULTI_RESULT "
+                + json.dumps(
+                    {
+                        "elapsed_time": elapsed_time,
+                        "result": result_text,
+                        "scores": self.scores,
+                    }
+                )
+                + "\n"
+            )
+            self.log_file.flush()
+
+        self.show_save_widgets()
+
+    def show_save_widgets(self):
+        self.clear_save_widgets()
+
+        self.save_hint_label = tk.Label(
+            self.window,
+            text="Set names for P1 and P2, then save the replay.",
+            font=("Helvetica", 12),
+        )
+        self.save_hint_label.pack()
+
+        self.p1_name_label = tk.Label(self.window, text="P1 Name:", font=("Helvetica", 12))
+        self.p1_name_label.pack()
+        self.p1_name_entry = tk.Entry(self.window)
+        self.p1_name_entry.insert(0, "P1")
+        self.p1_name_entry.pack()
+
+        self.p2_name_label = tk.Label(self.window, text="P2 Name:", font=("Helvetica", 12))
+        self.p2_name_label.pack()
+        self.p2_name_entry = tk.Entry(self.window)
+        self.p2_name_entry.insert(0, "P2")
+        self.p2_name_entry.pack()
+
+        self.save_button = tk.Button(self.window, text="Save Replay", command=self.save_recording)
+        self.save_button.pack()
+
+    def sanitize_name(self, value, fallback):
+        cleaned = value.strip()
+        if not cleaned:
+            cleaned = fallback
+        cleaned = re.sub(r"[^A-Za-z0-9_-]+", "_", cleaned)
+        return cleaned or fallback
+
+    def save_recording(self):
+        if self.record_saved or self.log_file is None or self.log_file.closed:
+            return
+
+        player_one_name = self.sanitize_name(self.p1_name_entry.get(), "P1")
+        player_two_name = self.sanitize_name(self.p2_name_entry.get(), "P2")
+
+        self.log_file.write(
+            "MULTI_NAMES "
+            + json.dumps(
+                {
+                    "player1": player_one_name,
+                    "player2": player_two_name,
+                }
+            )
+            + "\n"
+        )
+        self.log_file.flush()
+        self.cleanup_log()
+
+        timestamp = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())
+        record_path = os.path.join(
+            "records",
+            f"multi_{player_one_name}_{player_two_name}_{timestamp}.log",
+        )
+        os.replace(TEMP_RECORD_PATH, record_path)
+        self.record_saved = True
+        self.status_label.config(text=f"Replay saved: {os.path.basename(record_path)}")
+        self.clear_save_widgets()
+
+    def render(self):
         self.canvas.delete("all")
-        for segment in self.snake:
-            self.canvas.create_rectangle(segment[0], segment[1], segment[0] + 10, segment[1] + 10, fill="green")
-        self.food = self.canvas.create_oval(x1, y1, x2, y2, fill="red")
 
-        if self.check_collision():
-            self.game_over()
+        for segment in self.snakes["player1"]:
+            self.canvas.create_rectangle(
+                segment[0],
+                segment[1],
+                segment[0] + GRID_SIZE,
+                segment[1] + GRID_SIZE,
+                fill="green",
+                outline="",
+            )
 
-    def check_collision(self):
-        x, y = self.snake[0]
-        if x < 0 or x >= self.width or y < 0 or y >= self.height:
-            return True
-        for segment in self.snake[1:]:
-            if x == segment[0] and y == segment[1]:
-                return True
-        return False
+        for segment in self.snakes["player2"]:
+            self.canvas.create_rectangle(
+                segment[0],
+                segment[1],
+                segment[0] + GRID_SIZE,
+                segment[1] + GRID_SIZE,
+                fill="cyan",
+                outline="",
+            )
+
+        for food_x, food_y in self.food_positions:
+            self.canvas.create_oval(
+                food_x,
+                food_y,
+                food_x + GRID_SIZE,
+                food_y + GRID_SIZE,
+                fill="red",
+                outline="",
+            )
+
+    def log_state(self):
+        if self.log_file is None or self.log_file.closed:
+            return
+
+        elapsed_time = int(time.time() - self.start_time) if self.start_time else 0
+        snapshot = {
+            "frame": self.frame,
+            "elapsed_time": elapsed_time,
+            "food_positions": self.food_positions,
+            "player1": {
+                "alive": self.alive["player1"],
+                "direction": self.directions["player1"],
+                "score": self.scores["player1"],
+                "snake": self.snakes["player1"],
+            },
+            "player2": {
+                "alive": self.alive["player2"],
+                "direction": self.directions["player2"],
+                "score": self.scores["player2"],
+                "snake": self.snakes["player2"],
+            },
+        }
+        self.log_file.write("MULTI_FRAME " + json.dumps(snapshot) + "\n")
+        self.log_file.flush()
 
     def on_timer(self):
-        self.frame = self.frame+1
-        if not self.start_time:
+        if self.game_over_flag:
+            return
+
+        if self.start_time is None:
             self.start_time = time.time()
+
+        self.frame += 1
         elapsed_time = int(time.time() - self.start_time)
         self.timer_label.config(text=f"Time: {elapsed_time} s")
-
-        self.move_snake()
+        self.tick()
 
         if not self.game_over_flag:
             self.timer = self.window.after(self.timer_interval, self.on_timer)
-        else:
-            self.log_file.close()
 
-    def game_over(self):
-        self.game_over_flag = True
-        self.window.bind("<space>", self.restart_game)
-        elapsed_time = int(time.time() - self.start_time)
-        self.timer_label.config(text=f"Time: {elapsed_time} s")
-        self.canvas.create_text(self.width / 2, self.height / 2, text="Game Over", font=("Helvetica", 24), fill="red")
-        self.log_file.write(f"[Frame: {self. frame}] Game Over\n")
-        self.log_file.write(f"Survival Time: {elapsed_time} s\n")
-        self.log_file.write(f"Score: {self.score}\n")
-        self.log_file.close()
-        
-        # 创建昵称输入框
-        input_remind_label = tk.Label(self.window, text="Please input your nickname to save the game record\nAnd/Or press space to restart", font=("Helvetica", 16))
-        nickname_entry = tk.Entry(self.window)
-        input_remind_label.pack()
-        nickname_entry.pack()
-
-        def rename_log():
-            nickname = nickname_entry.get().strip()
-            if nickname.__len__()==0:
-                nickname = 'player'
-            timestamp = time.strftime("%Y-%m-%d_%H-%M", time.localtime())
-            new_log_name = f"{nickname}_{timestamp}.log"
-            self.log_file.close()
-            os.rename("records/game_log.log", 'records/'+new_log_name)
-            nickname_entry.destroy()
-            confirm_button.destroy()
-            input_remind_label.destroy()
-
-
-        # 创建确认按钮
-        confirm_button = tk.Button(self.window, text="确认", command=rename_log)
-        confirm_button.pack()
-
-    def restart_game(self, event=None):
-        
-        self.window.unbind("<space>")
-        self.log_file = open("records/game_log.log", "w")
-        self.snake = [(self.width / 2, self.height / 2)]
-        self.direction = "Right"
-        self.food = self.create_food()
-        self.game_over_flag = False
-        self.start_time = None
-        self.score = 0
-        self.score_label.config(text="Score: 0")
+    def restart_game(self):
+        if self.timer is not None:
+            self.window.after_cancel(self.timer)
+            self.timer = None
+        self.reset_state()
+        self.start_time = time.time()
         self.timer = self.window.after(self.timer_interval, self.on_timer)
-        
 
     def start(self):
         self.start_time = time.time()
         self.timer = self.window.after(self.timer_interval, self.on_timer)
         self.window.mainloop()
-    
-    #close event hendeler
-    def onClose(self):
+
+    def on_close(self):
+        if self.timer is not None:
+            self.window.after_cancel(self.timer)
+        self.cleanup_log()
         self.window.quit()
         self.window.destroy()
-    def get_local_ip():
-        # 创建一个临时的套接字对象
-        temp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
-        try:
-            # 连接到一个虚拟的目标地址和端口
-            temp_socket.connect(('8.8.8.8', 80))
-
-            # 获取本地套接字的 IP 地址
-            local_ip = temp_socket.getsockname()[0]
-            return local_ip
-        finally:
-            # 关闭临时套接字
-            temp_socket.close()
 
 
+if __name__ == "__main__":
+    LocalMultiplayerSnakeGame(DEFAULT_WIDTH, DEFAULT_HEIGHT).start()
